@@ -1,0 +1,4 @@
+# requirements.txt for pip3
+
+Flask==1.0.2
+Flask-SQLAlchemy==2.3.2
