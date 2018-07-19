@@ -27,7 +27,7 @@ load_data:
 	curl "localhost:5000/load_data"
 
 clean:
-	rm test_data.csv
-	rm *.sqlite3
-	rm *.log
-	rm -rf $(VENV_NAME)
+	(rm test_data.csv; \
+	rm *.sqlite3; \
+	rm *.log; \
+	rm -rf $(VENV_NAME))

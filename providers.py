@@ -4,9 +4,12 @@ import json
 
 providers_app = Flask(__name__)
 providers_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///providers.sqlite3'
-# There was a warning in the logs about SQLALCHEMY_TRACK_MODIFICATIONS adding overhead
+# There was a warning in the logs about SQLALCHEMY_TRACK_MODIFICATIONS
+# adding overhead, and since I'm not rapidly iterating on models, I'll disable it
+# for cleaner logs, see http://flask-sqlalchemy.pocoo.org/2.3/config/
 providers_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(providers_app)
+
 
 # Basic index making sure everything works
 @providers_app.route('/')
@@ -16,6 +19,7 @@ def hello():
 
 # Providers model to give structure for entering data, querying
 class Providers(db.Model):
+    # Model attrs, DB columns
     id = db.Column('id', db.Integer, primary_key = True)
     drg_definition = db.Column(db.String(100))
     provider_id = db.Column(db.Integer)
@@ -30,6 +34,7 @@ class Providers(db.Model):
     average_total_payments = db.Column(db.Float)
     average_medicare_payments = db.Column(db.Float)
 
+    # Fields for JSON serialization
     SERIAL_FIELDS = {
             'provider_name': 'Provider Name',
             'provider_street_address': 'Provider Street Address',
@@ -62,6 +67,7 @@ class Providers(db.Model):
         self.average_medicare_payments = average_medicare_payments
 
     def serialize(self):
+        """ Serialize for JSON """
         serial_dict = {}
         for key in self.__class__.SERIAL_FIELDS.keys():
             if key == 'provider_zip_code':
@@ -76,7 +82,14 @@ class Providers(db.Model):
 # Route to run the script to load the data
 @providers_app.route('/load_data')
 def load_csv_data():
-    # Load the master data file
+    """ Load the master data file into the DB
+
+    Example
+        localhost:5000/load_data
+
+    Also takes query parameter 'filename' a local file name
+    for loading data from other sources, used in testing.
+    """
     file = './Inpatient_Prospective_Payment_System__IPPS__Provider_Summary_for_the_Top_100_Diagnosis-Related_Groups__DRG__-_FY2011.csv'
     # Unless we have specified a local file
     if request.args.get('filename'):
@@ -141,9 +154,23 @@ def load_csv_data():
     return ret_text
 
 
-# JSON API route
 @providers_app.route('/providers')
 def get_data():
+    """ JSON API route
+
+    Serves the following query parameters
+            max_discharges: The maximum number of Total Discharges
+            min_discharges: The minimum number of Total Discharges
+            max_average_covered_charges: The maximum Average Covered Charges
+            min_average_covered_charges: The minimum Average Covered Charges
+            max_average_medicare_payments: The maximum Average Medicare Payment
+            min_average_medicare_payments: The minimum Average Medicare Payment
+            state: The exact state that the provider is from
+            limit: A limit for the number of results to return, defaults to 0
+
+    Example query
+        localhost:5000/providers?max_discharges=11max_average_covered_charges=50000&state=GA
+    """
     ret_items = None
     # Get and parse query params
     p_query = Providers.query
@@ -153,23 +180,37 @@ def get_data():
     else:
         # Query DB for matching providers with query params
         # These filter params are additive
-        if request.args.get('max_discharges'):
-            p_query = p_query.filter(Providers.total_discharges <= int(request.args.get('max_discharges')))
-        if request.args.get('min_discharges'):
-            p_query = p_query.filter(Providers.total_discharges >= int(request.args.get('min_discharges')))
-        if request.args.get('max_average_covered_charges'):
-            p_query = p_query.filter(Providers.average_covered_charges <= int(request.args.get('max_average_covered_charges')))
-        if request.args.get('min_average_covered_charges'):
-            p_query = p_query.filter(Providers.average_covered_charges >= int(request.args.get('min_average_covered_charges')))
-        if request.args.get('max_average_medicare_payments'):
-            p_query = p_query.filter(Providers.average_medicare_payments <= int(request.args.get('max_average_medicare_payments')))
-        if request.args.get('min_average_medicare_payments'):
-            p_query = p_query.filter(Providers.average_medicare_payments >= int(request.args.get('min_average_medicare_payments')))
-        if request.args.get('state'):
-            p_query = p_query.filter(Providers.provider_state == request.args.get('state'))
-        # I added 'limit' for my own testing purposes
-        if request.args.get('limit'):
-            p_query = p_query.limit(int(request.args.get('limit')))
+        try:
+            if request.args.get('max_discharges'):
+                p_query = p_query.filter(Providers.total_discharges <= int(request.args.get('max_discharges')))
+            if request.args.get('min_discharges'):
+                p_query = p_query.filter(Providers.total_discharges >= int(request.args.get('min_discharges')))
+            if request.args.get('max_average_covered_charges'):
+                p_query = p_query.filter(Providers.average_covered_charges <= int(request.args.get('max_average_covered_charges')))
+            if request.args.get('min_average_covered_charges'):
+                p_query = p_query.filter(Providers.average_covered_charges >= int(request.args.get('min_average_covered_charges')))
+            if request.args.get('max_average_medicare_payments'):
+                p_query = p_query.filter(Providers.average_medicare_payments <= int(request.args.get('max_average_medicare_payments')))
+            if request.args.get('min_average_medicare_payments'):
+                p_query = p_query.filter(Providers.average_medicare_payments >= int(request.args.get('min_average_medicare_payments')))
+            if request.args.get('state'):
+                p_query = p_query.filter(Providers.provider_state == request.args.get('state'))
+            # I added 'limit' for my own testing purposes
+            if request.args.get('limit'):
+                p_query = p_query.limit(int(request.args.get('limit')))
+        except Exception as e:
+            # If query params are malformed, I'd like to return a useful error
+            data = {
+                'text': 'Malformed query parameters',
+                'error': str(e)
+            }
+            response = providers_app.response_class(
+                response=json.dumps(data),
+                status=400,
+                mimetype='application/json'
+            )
+            return response
+
     # Fetch the models from the DB
     models = p_query.all()
     # Return JSON for model values
@@ -182,10 +223,12 @@ def get_data():
     return response
 
 
+# Break out the DB init method so that we can initialize another DB for testing
 def init_db():
+    """ Methods to initialize the DB """
     db.create_all()
 
 
 if __name__ == '__main__':
     init_db()
-    providers_app.run()
+    providers_app.run(host='0.0.0.0')
