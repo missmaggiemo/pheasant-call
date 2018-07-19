@@ -1,3 +1,7 @@
 venv/
 *.log
 *.tmp
+*.sqlite3
+test_data.csv
+.pytest_cache/
+__pycache__/

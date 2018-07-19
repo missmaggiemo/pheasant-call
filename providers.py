@@ -76,7 +76,11 @@ class Providers(db.Model):
 # Route to run the script to load the data
 @providers_app.route('/load_data')
 def load_csv_data():
+    # Load the master data file
     file = './Inpatient_Prospective_Payment_System__IPPS__Provider_Summary_for_the_Top_100_Diagnosis-Related_Groups__DRG__-_FY2011.csv'
+    # Unless we have specified a local file
+    if request.args.get('filename'):
+        file = request.args.get('filename')
     column_names = []
     line_num = 1
     with open(file, 'r') as f:
@@ -123,12 +127,10 @@ def load_csv_data():
                 db.session.add(new_provider)
             except Exception as e:
                 # If there is an issue, we want to log and continue
-                print('Line %s Exception %s on fields: ', str(line_num), e)
+                print('Line {} Exception {} on fields: '.format(str(line_num), e))
                 print(fields)
             # Flush to file on every 100th entry
             if line_num % 100 == 0:
-                # Logging for my own development purposes
-                print('Flush at %{}', str(line_num))
                 db.session.commit()
             # Keeping track of line number for logging
             line_num += 1
@@ -169,7 +171,6 @@ def get_data():
         if request.args.get('limit'):
             p_query = p_query.limit(int(request.args.get('limit')))
     # Fetch the models from the DB
-    print(p_query)
     models = p_query.all()
     # Return JSON for model values
     serialized = [m.serialize() for m in models]
@@ -181,6 +182,10 @@ def get_data():
     return response
 
 
-if __name__ == '__main__':
+def init_db():
     db.create_all()
+
+
+if __name__ == '__main__':
+    init_db()
     providers_app.run()

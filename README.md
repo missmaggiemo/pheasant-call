@@ -25,6 +25,11 @@ make run
 make load_data
 ```
 
+### Run the app locally, in the background
+```
+make test
+```
+
 ### Why Flask?
 Flask is a light-weight Python web server middleware framework. I've done most of my development in Python lately, so that's what I want to use now. Since the assignment asks for a read-only API for what is effectively just one table of data, I don't need a CRUD-oriented framework like Django.
 
@@ -38,4 +43,4 @@ Flask is a light-weight Python web server middleware framework. I've done most o
 - [x] Parse query params
 - [x] README
 - [ ] Launch on my AWS instance
-- [ ] Tests
+- [x] Tests
